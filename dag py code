@@ -1,0 +1,79 @@
+# required imports
+from datetime import timedelta
+from airflow import DAG
+from airflow.operators.bash_operator import BashOperator
+from airflow.utils.dates import days_ago
+
+
+# defining default arguements
+default_args = {
+    'owner':'matinkzm', # owner name
+    'start_date':days_ago(0), # start date(in this case today)
+    'email':['matinkzm@gmail.com'], 
+    'email_on_failure':True,
+    'email_on_retry':True,
+    'retries':1,
+    'retry_delay':timedelta(minutes=5),
+}
+
+# defining dag
+dag = DAG(
+    'ETL_toll_data', # dag name
+    schedule_interval=timedelta(days=1), # run the task everyday
+    default_args=default_args,
+    description='Apache Airflow Final Assignment',
+)
+
+# defining unzip task
+unzip_data=BashOperator(
+    task_id='unzip_data',
+    bash_command='tar -xzf /home/project/airflow/dags/finalassignment/tolldata.tgz',
+    dag=dag, # select which dag it belongs to
+)
+
+# defining extract data from csv task
+extract_data_from_csv=BashOperator(
+    task_id='extract_data_from_csv',
+    bash_command='cut -d"," -f1-4 /home/project/airflow/dags/finalassignment/vehicle-data.csv \
+         > /home/project/airflow/dags/finalassignment/csv_data.csv',
+    dag=dag,
+)
+
+# defining extract data from tsv task
+extract_data_from_tsv=BashOperator(
+    task_id='extract_data_from_tsv',
+    bash_command='cut -d -f5-7 /home/project/airflow/dags/finalassignment/tollplaza-data.tsv \
+         > /home/project/airflow/dags/finalassignment/tsv_data.csv',
+    # default delimiter for cut is tab
+    dag=dag,
+)
+
+# defining extract data from fixed width file
+extract_data_from_fixed_width=BashOperator(
+    task_id='extarct_data_from_fixed_width',
+    bash_command='cut -c59-67 /home/project/airflow/dags/finalassignment/payment-data.txt | tr " " ","\
+         > /home/project/airflow/dags/finalassignment/fixed_width_data.csv',
+    dag=dag,
+)
+
+# defining consolidate extracted data task
+consolidate_data=BashOperator(
+    task_id='onsolidate_data',
+    bash_command='paste /home/project/airflow/dags/finalassignment/csv_data.csv\
+         /home/project/airflow/dags/finalassignment/tsv_data.csv\
+         /home/project/airflow/dags/finalassignment/fixed_width_data.csv\
+         > /home/project/airflow/dags/finalassignment/extracted_data.csv',
+    dag=dag,
+)
+
+# defining transform and load task
+transform_data=BashOperator(
+    task_id='transform data',
+    bash_command='cut -d -f4 /home/project/airflow/dags/finalassignment/extracted_data.csv\
+        |tr [a-z] [A-Z]\
+        > /home/project/airflow/dags/finalassignment/transformed_data.csv',
+    dag=dag,
+)
+
+# tasks pipeline
+unzip_data >> extract_data_from_csv >> extract_data_from_tsv >> extract_data_from_fixed_width >> consolidate_data >> transform_data
